@@ -28,9 +28,11 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = config('DEBUG', default=False, cast=bool)
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='').split(',')
 
-ALLOWED_HOSTS = []
+# Pinecone 설정
+PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 
 
 # Application definition
