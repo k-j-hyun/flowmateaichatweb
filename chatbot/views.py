@@ -247,13 +247,10 @@ def user_login(request):
                 login(request, user)
                 messages.success(request, f'{username}님, 환영합니다!')
                 return redirect('home')
-        # 로그인 실패시 form 객체를 그대로 전달 (오류 메시지 포함)
-    else:
-        # GET 요청시 빈 폼 생성
-        form = AuthenticationForm()
+        messages.error(request, '잘못된 사용자명 또는 비밀번호입니다.')
     
-    # GET 요청이거나 로그인 실패시 - form 객체를 함께 전달
-    return render(request, 'registration/login.html', {'form': form})
+    # GET 요청이거나 로그인 실패시
+    return render(request, 'registration/login.html')
 
 def signup(request):
     """사용자 회원가입"""
@@ -268,14 +265,10 @@ def signup(request):
             messages.success(request, f'{username}님, 회원가입이 완료되었습니다!')
             login(request, user)
             return redirect('home')
-        # 폼이 유효하지 않을 때는 form 객체를 그대로 템플릿에 전달
-        # (form.errors가 포함된 상태로)
-    else:
-        # GET 요청시 빈 폼 생성
-        form = UserCreationForm()
+        messages.error(request, '회원가입 중 오류가 발생했습니다.')
     
-    # GET 요청이거나 회원가입 실패시 - form 객체를 함께 전달
-    return render(request, 'registration/signup.html', {'form': form})
+    # GET 요청이거나 회원가입 실패시
+    return render(request, 'registration/signup.html')
 
 def user_logout(request):
     """사용자 로그아웃"""
