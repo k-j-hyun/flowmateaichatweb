@@ -68,10 +68,10 @@ pydantic-settings==2.10.1
 
 # 텍스트 처리
 tokenizers==0.21.4
-transformers==4.54.1
+# transformers==4.54.1
 
 # 경량 머신러닝 (CPU 버전만)
-torch==2.5.1
+# torch==2.5.1
 scikit-learn==1.7.1
 
 # 기타 유틸
