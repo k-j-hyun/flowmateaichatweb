@@ -1,7 +1,7 @@
 # Python 3.10.13 호환 배포용 requirements.txt
 
 # 웹 서버
-gunicorn FlowMate.wsgi:application
+gunicorn>=21.0.0
 Django>=5.2.0,<6.0.0
 
 # 핵심 의존성
