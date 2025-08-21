@@ -21,19 +21,30 @@
             flex-direction: column;
         }
 
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
         .header {
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            color: #4a5568;
             padding: 1rem 2rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .logo {
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             font-weight: bold;
-            color: #333;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .nav-buttons {
@@ -42,17 +53,25 @@
         }
 
         .nav-btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border: 2px solid transparent;
+            background: transparent;
+            border-radius: 20px;
             text-decoration: none;
-            color: #333;
-            transition: all 0.2s;
+            color: #4a5568;
+            font-weight: 500;
+            transition: all 0.3s ease;
         }
 
         .nav-btn:hover {
-            background: #f0f0f0;
+            color: #6366f1;
+            transform: translateY(-2px);
+        }
+
+        .nav-btn[style*="background: #f0f0f0"] {
+            background: #6366f1 !important;
+            color: white !important;
+            border-color: #6366f1 !important;
         }
 
         /* 드롭다운 스타일 */
@@ -96,23 +115,28 @@
         }
 
         #resetChatBtn {
-            background-color: #f5f5f5; /* 연한 회색 배경 */
-            border: 1px solid #ccc;    /* 옅은 테두리 */
-            padding: 6px 12px;
-            border-radius: 6px;        /* 살짝 둥근 모서리 */
-            font-size: 13px;
-            color: #333;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border: 2px solid #6366f1;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
-            transition: background-color 0.2s ease;
+            transition: all 0.3s ease;
             margin-top: 10px;
+            box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
         }
 
         #resetChatBtn:hover {
-            background-color: #eaeaea; /* 호버 시 조금 진해짐 */
+            background: transparent;
+            color: #6366f1;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
         }
 
         #resetChatBtn:active {
-            background-color: #ddd; /* 클릭 시 더 진해짐 */
+            transform: translateY(0);
         }
 
         .main-container {
@@ -151,22 +175,9 @@
         }
 
         .upload-zone.dragover {
-            border-color: #0969da;
+            border-color: #6366f1;
             background: #dbeafe;
         }
-
-        /*.upload-icon {
-            width: 48px;
-            height: 48px;
-            margin: 0 auto 1rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 24px;
-        }*/
 
         .upload-icon:before {
             content: "";
@@ -183,14 +194,15 @@
         }
 
         .upload-btn {
-            background: linear-gradient(135deg, #877b7bff 0%, #999292dc 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 500;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
         }
 
         .upload-btn:hover {
@@ -238,6 +250,35 @@
         .file-item.selected {
             background: #e6f7ff;
             font-weight: 500;
+            position: relative;
+        }
+
+        .file-item .file-name {
+            flex: 1;
+            margin-right: 8px;
+        }
+
+        .file-item .unselect-btn {  /* 선택 취소 버튼 */
+            background: #ff4757;
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 12px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .file-item.selected .unselect-btn {
+            display: flex;
+        }
+
+        .file-item .unselect-btn:hover {
+            background: #ff3742;
         }
 
         .file-item:last-child {
@@ -245,14 +286,15 @@
         }
 
         .download-btn {
-            padding: auto;
-            background: linear-gradient(135deg, #a8a8a8ff 0%, #777777ff 100%);
+            padding: 6px 12px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             border: none;
             border-radius: 4px;
             font-size: 16px;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
         }
 
         .download-btn:hover {
@@ -310,7 +352,7 @@
         }
 
         .message.user .message-avatar {
-            background: linear-gradient(135deg, #667eea 0%, #dfdfdfff 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
         }
 
@@ -327,7 +369,7 @@
         }
 
         .message.user .message-content {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             border-bottom-right-radius: 4px;
         }
@@ -364,19 +406,20 @@
 
         .message-input:focus {
             outline: none;
-            border-color: #0969da;
-            box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
         .send-btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             padding: 1rem 1.5rem;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 500;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
         }
 
         .send-btn:hover {
@@ -399,7 +442,7 @@
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             border-radius: 2px;
             transition: width 0.3s ease;
         }
@@ -440,18 +483,20 @@
         .download-link {
             display: inline-block;
             padding: 0.75rem 1.5rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24);
+            color: #333;
             border-radius: 8px;
             text-decoration: none;
             font-weight: 500;
             margin-top: 1rem;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
         }
 
         .download-link:hover {
             transform: scale(1.05);
         }
+
 
         @media (max-width: 768px) {
             .main-container {
@@ -466,13 +511,14 @@
         }
     </style>
 </head>
-<body>
+<body class="chat-page">
     <div class="header">
-        <div class="logo">FlowMate Chat</div>
+        <div class="logo"><a href="{% url 'home' %}" style="text-decoration: none; color: inherit;">FlowMate Chat</a></div>
         <div class="nav-buttons">
             <a href="{% url 'home' %}" class="nav-btn">홈</a>
-            <a href="#" class="nav-btn" style="background: #f0f0f0;">채팅</a>
-            <a href="/presentation/" class="nav-btn">발표분석</a>
+            <a href="#" class="nav-btn" style="background: #f0f0f0;">AI 채팅</a>
+            <a href="/presentation/" class="nav-btn">발표 분석</a>
+            <a href="{% url 'hr_evaluation_page' %}" class="nav-btn">HR 예측</a>
             {% if user.is_authenticated %}
                 <div class="dropdown">
                     <a href="#" class="nav-btn dropbtn" id="dropdownBtn">{{ user.username }} ▼</a>
@@ -496,7 +542,7 @@
                     <h3>파일을 여기에 드래그하거나 클릭하여 업로드하세요</h3>
                     <p>PDF, DOCX, TXT, CSV 등 지원</p>
                     <button class="upload-btn" id="uploadBtn">파일 선택</button>
-                    <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv,.xlsx,.mp3,.mp4,.wav,.pptx">
+                    <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv,.xlsx,.mp3,.mp4,.wav,.pptx,.jpg,.png,.jpeg">
                 </div>
                 <div id="loadingSection" style="display: none; margin-top: 1rem;">
                     <div class="loading">업로드 중... 벡터화 처리 중입니다.</div>
@@ -547,6 +593,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    {% include 'footer.html' %}
 
     <script>
         const uploadZone = document.getElementById('uploadZone');
@@ -649,15 +698,41 @@
                 data.files.forEach(file => {
                     const div = document.createElement('div');
                     div.className = 'file-item';
-                    div.textContent = file;
-                    div.onclick = () => {
-                        // 파일 선택
+                    
+                    const fileName = document.createElement('span');
+                    fileName.className = 'file-name';
+                    fileName.textContent = file;
+                    
+                    const unselectBtn = document.createElement('button');
+                    unselectBtn.className = 'unselect-btn';
+                    unselectBtn.innerHTML = '&times;';
+                    unselectBtn.title = '선택 취소';
+                    
+                    div.appendChild(fileName);
+                    div.appendChild(unselectBtn);
+                    
+                    // 파일 선택 이벤트
+                    fileName.onclick = () => {
+                        // 모든 파일 선택 해제
                         Array.from(uploadedFileList.children).forEach(c => c.classList.remove('selected'));
+                        // 현재 파일 선택
                         div.classList.add('selected');
                         currentFilePath = 'temp/' + file;
                     };
-                    // 첫 파일 선택 유지
-                    if ('temp/' + file === currentFilePath) div.classList.add('selected');
+                    
+                    // 선택 취소 이벤트
+                    unselectBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        div.classList.remove('selected');
+                        // 기본 파일로 되돌리기 (예: sample.txt)
+                        currentFilePath = "sample.txt";
+                    };
+                    
+                    // 초기 선택 상태 설정
+                    if ('temp/' + file === currentFilePath) {
+                        div.classList.add('selected');
+                    }
+                    
                     uploadedFileList.appendChild(div);
                 });
             } catch (error) {
@@ -680,7 +755,7 @@
                     
                     const downloadBtn = document.createElement('button');
                     downloadBtn.className = 'download-btn';
-                    downloadBtn.textContent = '💾';
+                    downloadBtn.textContent = '📥';
                     downloadBtn.onclick = (e) => {
                         e.stopPropagation();
                         window.open(`/download_report/?filename=${encodeURIComponent(file)}`);
@@ -845,29 +920,40 @@
             });
         }
 
-    document.getElementById('resetChatBtn').addEventListener('click', function() {
-    fetch('/clear_history/', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if(data.cleared) {
-                // 대화 내용 클리어
-                document.getElementById('chatArea').innerHTML = '';
+        document.getElementById('resetChatBtn').addEventListener('click', function() {
+            fetch('/clear_history/', {method: 'POST'})
+                .then(response => response.json())
+                .then(data => {
+                    if(data.cleared) {
+                        // 대화 내용 클리어
+                        document.getElementById('chatArea').innerHTML = '';
 
-                // 리셋 안내 메시지 표시
-                const resetNotice = document.createElement('div');
-                resetNotice.className = 'bubble system'; // 스타일용 클래스
-                resetNotice.textContent = '이제 새로운 대화를 시작하세요!';
-                document.getElementById('chatArea').appendChild(resetNotice);
+                        // 리셋 안내 메시지 표시
+                        const resetNotice = document.createElement('div');
+                        resetNotice.className = 'message bot';
+                        
+                        const avatar = document.createElement('div');
+                        avatar.className = 'message-avatar';
+                        avatar.textContent = '●';
+                        
+                        const messageContent = document.createElement('div');
+                        messageContent.className = 'message-content';
+                        messageContent.textContent = '이제 새로운 대화를 시작하세요!';
+                        
+                        resetNotice.appendChild(avatar);
+                        resetNotice.appendChild(messageContent);
+                        document.getElementById('chatArea').appendChild(resetNotice);
 
-                // 추가로, alert창도 띄우고 싶으면 아래 주석 해제
-                alert('이제 새로운 대화를 시작하세요!');
-                Array.from(uploadedFileList.children).forEach(c => c.classList.remove('selected'));
+                        // 모든 파일 선택 취소
+                        Array.from(uploadedFileList.children).forEach(c => c.classList.remove('selected'));
 
-                // (3) 선택 파일을 기본값으로 되돌리기 (예: sample.txt)
-                currentFilePath = currentFilePath ; 
-            }
+                        // 기본 파일로 되돌리기
+                        currentFilePath = "sample.txt";
+                        
+                        alert('이제 새로운 대화를 시작하세요!');
+                    }
+                });
         });
-});
     </script>
 </body>
 </html>

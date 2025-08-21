@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>발표 영상 분석 - FlowMate</title>
     <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="csrf-token" content="">
     <style>
         * {
             margin: 0;
@@ -21,18 +22,23 @@
         }
 
         .header {
-            background: white;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            color: #4a5568;
             padding: 1rem 2rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         .logo {
-            font-size: 1.5rem;
+            font-size: 1.8rem;
             font-weight: bold;
-            color: #333;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .nav-buttons {
@@ -41,17 +47,65 @@
         }
 
         .nav-btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid #ddd;
-            background: white;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border: 2px solid transparent;
+            background: transparent;
+            border-radius: 20px;
             text-decoration: none;
-            color: #333;
-            transition: all 0.2s;
+            color: #4a5568;
+            font-weight: 500;
+            transition: all 0.3s ease;
         }
 
         .nav-btn:hover {
-            background: #f0f0f0;
+            color: #6366f1;
+            transform: translateY(-2px);
+        }
+
+        .nav-btn[style*="background: #f0f0f0"] {
+            background: #6366f1 !important;
+            color: white !important;
+            border-color: #6366f1 !important;
+        }
+
+        /* 드롭다운 스타일 */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            background-color: white;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            border-radius: 8px;
+            z-index: 1;
+            top: 100%;
+            margin-top: 5px;
+        }
+
+        .dropdown-content a {
+            color: #333 !important;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            transition: background-color 0.3s;
+            border-radius: 8px;
+        }
+
+        .dropdown-content a:hover {
+            background-color: #f1f1f1;
+        }
+
+        .dropdown-content.show {
+            display: block;
+        }
+
+        .dropbtn {
+            cursor: pointer;
         }
 
         .container {
@@ -60,6 +114,7 @@
             margin: 0 auto;
             padding: 2rem;
         }
+
 
         .page-header {
             text-align: center;
@@ -82,18 +137,18 @@
         }
 
         .upload-zone {
-            border: 2px dashed #4a90e2;
+            border: 2px dashed #6366f1;
             border-radius: 16px;
             padding: 3rem;
             text-align: center;
-            background: #f8fbff;
+            background: #f8f9fa;
             transition: all 0.3s;
             cursor: pointer;
             margin: 2rem 0;
         }
 
         .upload-zone.dragover {
-            border-color: #0969da;
+            border-color: #8b5cf6;
             background: #f6f8ff;
             transform: scale(1.02);
         }
@@ -112,7 +167,7 @@
         }
 
         .upload-btn {
-            background: #4a90e2;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
             color: white;
             padding: 0.8rem 2rem;
             border: none;
@@ -120,7 +175,8 @@
             cursor: pointer;
             font-weight: 500;
             font-size: 1rem;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
         }
 
         .upload-btn:hover {
@@ -191,7 +247,8 @@
         }
 
         .option-card.selected {
-            border-color: #4a90e2;
+            border-color: #6366f1;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
         }
 
         .option-card h4 {
@@ -215,15 +272,16 @@
         }
 
         .analyze-btn {
-            background: #8fb4d3;
-            color: white;
+            background: linear-gradient(45deg, #f59e0b, #fbbf24);
+            color: #333;
             padding: 0.8rem 2.5rem;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: 500;
             font-size: 1rem;
-            transition: transform 0.2s;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(255, 215, 0, 0.4);
         }
 
         .analyze-btn:hover {
@@ -272,8 +330,8 @@
 
         .result-table td:first-child {
             font-weight: 600;
-            color: #667eea;
-            background: #f8f9ff;
+            color: #6366f1;
+            background: linear-gradient(135deg, #f8f9ff 0%, #f0f7ff 100%);
             width: 45%;
         }
 
@@ -290,7 +348,7 @@
         }
 
         .feedback-section h4 {
-            color: #1976d2;
+            color: #6366f1;
             margin-bottom: 1rem;
             font-size: 1.5rem;
             display: flex;
@@ -299,7 +357,7 @@
         }
 
         .feedback-section h4:before {
-            content: "💡";
+            content: "";
             font-size: 24px;
         }
 
@@ -346,11 +404,24 @@
 </head>
 <body>
     <div class="header">
-        <div class="logo">FlowMate Chat</div>
+        <div class="logo"><a href="/" style="text-decoration: none; color: inherit;">FlowMate Chat</a></div>
         <div class="nav-buttons">
             <a href="/" class="nav-btn">홈</a>
-            <a href="/chat_page/" class="nav-btn">채팅</a>
-            <a href="#" class="nav-btn" style="background: #f0f0f0;">발표분석</a>
+            <a href="/chat_page/" class="nav-btn">AI 채팅</a>
+            <a href="#" class="nav-btn" style="background: #f0f0f0;">발표 분석</a>
+            <a href="/hr_evaluation/" class="nav-btn">HR 예측</a>
+            {% if user.is_authenticated %}
+                <div class="dropdown">
+                    <a href="#" class="nav-btn dropbtn" id="dropdownBtn">{{ user.username }} ▼</a>
+                    <div class="dropdown-content" id="dropdownContent">
+                        <a href="/admin/">관리자</a>
+                        <a href="{% url 'user_logout' %}">로그아웃</a>
+                    </div>
+                </div>
+            {% else %}
+                <a href="{% url 'user_login' %}" class="nav-btn">로그인</a>
+                <a href="{% url 'signup' %}" class="nav-btn">회원가입</a>
+            {% endif %}
         </div>
     </div>
 
@@ -504,7 +575,8 @@
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'X-CSRFToken': csrftoken,
-                }
+                },
+                credentials: 'include',
             })
             .then(response => response.json())
             .then(data => {
@@ -588,6 +660,40 @@
                 console.error(err);
             });
         });
+
+        // 드롭다운 메뉴 제어
+        const dropdownBtn = document.getElementById('dropdownBtn');
+        const dropdownContent = document.getElementById('dropdownContent');
+
+        if (dropdownBtn && dropdownContent) {
+            // 드롭다운 버튼 클릭 시 메뉴 토글
+            dropdownBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropdownContent.classList.toggle('show');
+            });
+
+            // 문서 클릭 시 드롭다운 메뉴 닫기
+            document.addEventListener('click', function(e) {
+                if (!dropdownBtn.contains(e.target) && !dropdownContent.contains(e.target)) {
+                    dropdownContent.classList.remove('show');
+                }
+            });
+
+            // 드롭다운 메뉴 항목 클릭 시 메뉴 닫기 (관리자 링크는 새 탭에서 열기)
+            dropdownContent.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    if (e.target.textContent.includes('관리자')) {
+                        e.preventDefault();
+                        window.open(e.target.href, '_blank');
+                    }
+                    dropdownContent.classList.remove('show');
+                }
+            });
+        }
     </script>
+
+    <!-- Footer -->
+    {% include 'footer.html' %}
 </body>
 </html>

@@ -1,26 +1,30 @@
 import os
 import hashlib
-import time
+import re
 from parsing_utils import split_chunks
-from collections import deque
 
-# Pinecone imports
+# Qdrant import 시도
 try:
-    from pinecone import Pinecone, ServerlessSpec
-    from langchain_pinecone import PineconeVectorStore
-    PINECONE_AVAILABLE = True
+    from langchain_qdrant import Qdrant
+    QDRANT_AVAILABLE = True
 except ImportError:
-    PINECONE_AVAILABLE = False
+    try:
+        from langchain_community.vectorstores import Qdrant
+        QDRANT_AVAILABLE = True
+    except ImportError:
+        QDRANT_AVAILABLE = False
 
-# 기존 LLM imports 유지
 from langchain_ollama import OllamaEmbeddings, ChatOllama
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance, VectorParams
+from collections import deque
 
 # 전역 캐시
 _vector_store_cache = {}
-_pinecone_client = None
+_client_cache = None
 
 class BufferMemory:
-    """기존 BufferMemory - 성능 최적화"""
+    """대화 히스토리 관리"""
     def __init__(self, max_turns=5):
         self.max_turns = max_turns
         self.history = deque(maxlen=max_turns)
@@ -34,9 +38,8 @@ class BufferMemory:
         return "\n".join([f"User: {h['user']}\nAssistant: {h['assistant']}" for h in self.history])
 
 def get_file_hash(file_path: str) -> str:
-    """파일 해시 - 캐싱으로 최적화"""
+    """파일 해시 생성 (크기+수정시간 기반)"""
     try:
-        # 파일 수정 시간과 크기로 간단한 해시 생성 (더 빠름)
         stat = os.stat(file_path)
         quick_hash = f"{stat.st_size}_{int(stat.st_mtime)}"
         return hashlib.md5(quick_hash.encode()).hexdigest()
@@ -44,165 +47,107 @@ def get_file_hash(file_path: str) -> str:
         return hashlib.md5(file_path.encode()).hexdigest()
 
 def get_qdrant_client():
-    """Pinecone 클라이언트로 변경"""
-    global _pinecone_client
-    if _pinecone_client is None:
+    """Qdrant 클라이언트 캐싱"""
+    global _client_cache
+    if _client_cache is None:
         try:
-            api_key = os.getenv("PINECONE_API_KEY")
-            if not api_key:
-                print("[PINECONE_API_KEY 환경변수가 설정되지 않았습니다]")
-                return None
-            
-            _pinecone_client = Pinecone(api_key=api_key)
-            print("[Pinecone 클라이언트 초기화 완료]")
+            _client_cache = QdrantClient(host="localhost", port=6333)
         except Exception as e:
-            print(f"[Pinecone 연결 실패: {e}]")
+            print(f"[Qdrant 연결 실패: {e}]")
             return None
-    return _pinecone_client
+    return _client_cache
 
 def get_llm(tokens=256):
-    """LLM 캐싱 - qwen2.5:7b 모델 유지"""
-    llm = "qwen2.5:7b-instruct"
+    """LLM 인스턴스 생성 (호환성 처리)"""
+    model_name = "anpigon/qwen2.5-7b-instruct-kowiki:latest"
+    # model_name = "exaone3.5:latest"
     try:
-        # 최신 버전에서는 num_predict 사용
-        return ChatOllama(
-            model=llm, 
-            temperature=0.2, 
-            num_predict=tokens
-        )
+        return ChatOllama(model=model_name, temperature=0.2, num_predict=tokens)
     except TypeError:
         try:
-            # 구버전에서는 max_tokens 사용
-            return ChatOllama(
-                model=llm, 
-                temperature=0.2, 
-                max_tokens=tokens
-            )
+            return ChatOllama(model=model_name, temperature=0.2, max_tokens=tokens)
         except TypeError:
-            # 둘 다 안 되면 기본 설정만
-            return ChatOllama(
-                model=llm, 
-                temperature=0.2, 
-            )
+            return ChatOllama(model=model_name, temperature=0.2)
 
-def get_user_hash(user_id: str) -> str:
-    """사용자 ID를 안전한 해시로 변환"""
-    return hashlib.md5(user_id.encode()).hexdigest()[:8]
-
-def create_user_index(user_id: str):
-    """사용자별 인덱스 생성"""
-    pc = get_qdrant_client()  # 함수명 유지하지만 Pinecone 반환
-    if not pc:
-        return None
+def data_to_vectorstore(file_path: str):
+    """벡터스토어 - 캐싱 및 빠른 체크"""
     
-    user_hash = get_user_hash(user_id)
-    index_name = f"user-{user_hash}"
-    
-    try:
-        # 기존 인덱스 확인
-        existing_indexes = [idx.name for idx in pc.list_indexes()]
-        
-        if index_name not in existing_indexes:
-            print(f"[새 인덱스 생성: {index_name}]")
-            
-            pc.create_index(
-                name=index_name,
-                dimension=1024,  # BGE-M3 차원
-                metric="cosine",
-                spec=ServerlessSpec(
-                    cloud="aws",
-                    region="us-east-1"
-                )
-            )
-            
-            # 인덱스 준비 대기
-            time.sleep(3)
-            print(f"[인덱스 생성 완료: {index_name}]")
-        else:
-            print(f"[기존 인덱스 사용: {index_name}]")
-        
-        return index_name
-        
-    except Exception as e:
-        print(f"[인덱스 생성 실패: {e}]")
-        return None
-
-def data_to_vectorstore(file_path: str, user_id: str = "default_user"):
-    """벡터스토어 - Pinecone으로 변경"""
-    
-    if not PINECONE_AVAILABLE:
-        print("[Pinecone 사용 불가 - None 반환]")
-        return None
-    
-    # 캐시 확인
+    # 캐시 확인 (가장 빠른 경로)
     file_hash = get_file_hash(file_path)
-    cache_key = f"{user_id}_{file_hash}"
+    cache_key = f"{file_path}_{file_hash}"
     
     if cache_key in _vector_store_cache:
         print(f"[캐시에서 벡터스토어 로드: {file_path}]")
         return _vector_store_cache[cache_key]
     
-    pc = get_qdrant_client()  # 실제로는 Pinecone 클라이언트
-    if pc is None:
+    if not QDRANT_AVAILABLE:
+        print("[Qdrant 사용 불가 - None 반환]")
         return None
     
-    # 사용자별 인덱스 생성/확인
-    index_name = create_user_index(user_id)
-    if not index_name:
+    client = get_qdrant_client()
+    if client is None:
         return None
     
+    collection_name = f"doc_{file_hash}"
+    
+    # 기존 컬렉션 빠른 확인
     try:
-        # Pinecone 인덱스 연결
-        index = pc.Index(index_name)
+        existing_collections = [col.name for col in client.get_collections().collections]
         
-        # 파일 해시로 기존 문서 확인
-        query_result = index.query(
-            vector=[0.0] * 1024,  # 더미 벡터
-            filter={"file_hash": file_hash},
-            top_k=1,
-            include_metadata=True
-        )
-        
-        # 기존 문서가 있으면 벡터스토어만 생성
-        if query_result.matches:
-            print(f"[기존 문서 사용: {file_hash}]")
-            vector_store = PineconeVectorStore(
-                index=index,
-                embedding=OllamaEmbeddings(model="bge-m3:567m"),
-                text_key="text"
-            )
-            _vector_store_cache[cache_key] = vector_store
-            return vector_store
+        if collection_name in existing_collections:
+            print(f"[기존 컬렉션 사용: {collection_name}]")
+            
+            # 벡터 수 빠른 체크
+            try:
+                collection_info = client.get_collection(collection_name)
+                print(collection_info)
+                if collection_info.points_count  > 0:
+                    vector_store = Qdrant(
+                        client=client,
+                        collection_name=collection_name,
+                        embeddings=OllamaEmbeddings(model="bona/bge-m3-korean:latest")
+                    )
+                    
+                    # 캐시에 저장
+                    _vector_store_cache[cache_key] = vector_store
+                    return vector_store
+                else:
+                    print("[빈 컬렉션 감지 - 삭제]")
+                    client.delete_collection(collection_name)
+            except:
+                print("[컬렉션 상태 확인 실패 - 삭제 후 재생성]")
+                try:
+                    client.delete_collection(collection_name)
+                except:
+                    pass
+    except:
+        print("[컬렉션 목록 조회 실패]")
     
-    except Exception as e:
-        print(f"[기존 문서 확인 실패: {e}]")
-    
-    # 새 문서 처리
-    print(f"[새 문서 임베딩 시작: {file_path}]")
+    # 새 컬렉션 생성 (필요한 경우만)
+    print(f"[새 컬렉션 생성: {collection_name}]")
     
     try:
-        # 문서 청킹
+        # 문서 청킹 - 기존과 동일
         documents = split_chunks(file_path)
         if not documents:
             return None
         
-        # 메타데이터에 file_hash와 user_id 추가
-        for doc in documents:
-            doc.metadata.update({
-                "file_hash": file_hash,
-                "user_id": user_id,
-                "file_name": os.path.basename(file_path)
-            })
+        # 컬렉션 생성
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
+        )
         
         # 벡터스토어 생성 및 문서 추가
-        vector_store = PineconeVectorStore(
-            index=index,
-            embedding=OllamaEmbeddings(model="bge-m3:567m"),
-            text_key="text"
+        vector_store = Qdrant(
+            client=client,
+            collection_name=collection_name,
+            embeddings=OllamaEmbeddings(model="bona/bge-m3-korean")
         )
         
         print("임베딩 및 저장 중...")
-        vector_store.add_documents(documents)
+        ids = [doc.metadata['order'] for doc in documents]
+        vector_store.add_documents(documents, ids=ids)
         
         # 캐시에 저장
         _vector_store_cache[cache_key] = vector_store
@@ -216,7 +161,7 @@ def data_to_vectorstore(file_path: str, user_id: str = "default_user"):
 
 def smart_determine_params(query: str):
     """개선된 파라미터 결정 - 답변 품질 고려"""
-    query_lower = query.lower()
+
     
     # 복잡한 작업 (더 많은 토큰과 문서 필요)
     if any(keyword in query for keyword in ['보고서', '발표', 'ppt', '분석', '비교', '평가']):
@@ -224,96 +169,114 @@ def smart_determine_params(query: str):
     
     # 퀴즈/문제 (적당한 양의 문서, 구조화된 답변)
     elif any(keyword in query for keyword in ['퀴즈']):
-        return 1000, 2048, "퀴즈"
+        return 100, 2048, "퀴즈"
     
     # 요약 (전체적인 이해 필요)
     elif any(keyword in query for keyword in ['요약', '정리', '핵심', '간추']):
-        return 1000, 1024, "요약"
+        return 100, 1024, "요약"
     
     # 구체적 질문 (관련성 높은 문서 필요)
     elif any(keyword in query for keyword in ['어떻게', '왜', '무엇', '언제', '어디서', '누가']):
-        return 1000, 2048, "구체적질문"
+        return 100, 2048, "구체적질문"
     
     # 일반 질문
     else:
-        return 100, 512, "일반"
+        return 10, 1024, "일반"
 
 def create_enhanced_prompt(query: str, combined_text: str, history: str, task_type: str):
     """향상된 프롬프트 생성"""
     
-    base_context = f"""다음은 사용자와의 대화 기록입니다:
+    base_context = f"""
+[LANGUAGE INSTRUCTION - MANDATORY]
+**반드시 한국어로만 답변하세요. 중국어, 영어, 일본어 등 다른 언어는 절대 사용 금지입니다.**
+**ONLY Korean language allowed. Chinese/English/Japanese strictly forbidden.**
+**只能用韩语回答，严禁使用中文或其他语言。**
+
+- 모든 답변은 반드시 한국어로만 작성해주세요
+- 요약, 보고서 작성, 발표자료 작성에 특화되어있습니다
+- 중국어나 영어가 포함된 답변은 절대 제공하지 마세요
+
+이전 대화 기록:
 {history}
 
-참고할 문서 내용:
+참고 문서 내용:
 {combined_text}
 
 사용자 질문: {query}
+
+**다시 한 번 강조: 답변은 100% 한국어로만 작성해주세요.**
 """
 
     if task_type == "복합분석":
         return f"""{base_context}
 
-위 문서를 바탕으로 사용자의 요청에 대해 체계적이고 전문적으로 답변해주세요.
-- 한국어로 답변합니다.
+**한국어로만 답변 필수**
+위 문서를 바탕으로 사용자의 요청에 대해 체계적이고 전문적으로 한국어로 답변해주세요:
+- 반드시 한국어로만 답변합니다
 - 문서의 핵심 내용을 충분히 반영하세요
 - 논리적 구조로 답변을 구성하세요
 - 구체적인 근거와 예시를 포함하세요
 - 문서에 없는 내용은 추측하지 마세요
-- 반복되는 말을 하지 마세요
+- 중국어/영어 사용 절대 금지
 
-답변:"""
+한국어 답변:"""
 
     elif task_type == "퀴즈":
         return f"""{base_context}
 
-문서 내용을 기반으로 퀴즈를 생성해주세요.
+**한국어 퀴즈 생성**
+문서 내용을 기반으로 한국어로만 퀴즈를 생성해주세요:
 - 문서의 핵심 개념과 중요한 정보를 중심으로 구성하세요
 - 다양한 유형의 문제를 포함하세요 (객관식, 단답형, 서술형 등)
-- 사용자의 요청이 없다면 문제는 5개만 생성합니다.
+- 사용자의 요청이 없다면 문제는 5개만 생성합니다
 - 각 문제에 대한 정답과 해설을 제공하세요
 - 난이도를 적절히 조절하세요
-- 반복되는 말을 하지 마세요
+- 반드시 한국어로만 작성하세요
 
-퀴즈:"""
+한국어 퀴즈:"""
 
     elif task_type == "요약":
         return f"""{base_context}
 
-문서의 주요 내용을 체계적으로 요약해주세요.
+**한국어 요약**
+문서의 주요 내용을 체계적으로 한국어로만 요약해주세요:
 - 핵심 주제와 요점을 명확히 정리하세요
 - 중요도에 따라 내용을 구조화하세요
 - 구체적인 데이터나 예시가 있다면 포함하세요
 - 간결하지만 포괄적으로 정리하세요
-- 반복되는 말을 하지 마세요
+- 반드시 한국어로만 작성하세요
 
-요약:"""
+한국어 요약:"""
 
     elif task_type == "구체적질문":
         return f"""{base_context}
 
-문서를 참조하여 구체적이고 정확하게 답변해주세요.
+**한국어로 구체적 답변**
+문서를 참조하여 구체적이고 정확하게 한국어로만 답변해주세요:
 - 문서에서 관련된 정보를 찾아 근거로 제시하세요
 - 단계별로 명확하게 설명하세요
 - 문서에 명시되지 않은 부분은 "문서에서 확인할 수 없습니다"라고 명시하세요
 - 가능한 한 구체적인 예시나 수치를 포함하세요
-- 반복되는 말을 하지 마세요
+- 반드시 한국어로만 답변하세요
 
-답변:"""
+한국어 답변:"""
 
     else:  # 일반
         return f"""{base_context}
 
-문서를 바탕으로 사용자의 질문에 정확하고 친절하게 답변해주세요.
+**한국어로 일반 답변**
+문서를 바탕으로 사용자의 질문에 정확하고 친절하게 한국어로만 답변해주세요:
 - 문서의 관련 내용을 충분히 활용하세요
 - 명확하고 이해하기 쉽게 설명하세요
 - 추가적인 맥락이나 배경 정보도 제공하세요
 - 문서 범위를 벗어나는 추측은 피하세요
 - 답변은 너무 길지 않게 해주세요
+- 반드시 한국어로만 답변하세요
 
-답변:"""
+한국어 답변:"""
 
-def question_answer_with_memory(file_path: str, query: str, memory: BufferMemory, user_id: str = "default_user", tokens=256) -> str:
-    """개선된 메인 함수 - user_id 파라미터 추가"""
+def question_answer_with_memory(file_path: str, query: str, memory: BufferMemory, tokens=256) -> str:
+    """개선된 메인 함수 - 답변 품질과 성능 균형"""
     
     # 1. 향상된 파라미터 결정
     k, optimized_tokens, task_type = smart_determine_params(query)
@@ -321,39 +284,28 @@ def question_answer_with_memory(file_path: str, query: str, memory: BufferMemory
     
     print(f"[작업 유형: {task_type}, 문서 수: {k}, 토큰: {final_tokens}]")
     
-    # 2. 벡터스토어 로드 (user_id 추가)
-    vector_store = data_to_vectorstore(file_path, user_id)
+    # 2. 벡터스토어 로드 (캐싱됨)
+    vector_store = data_to_vectorstore(file_path)
     
     # 3. 벡터스토어 실패 시 즉시 폴백
     if vector_store is None:
         print("[벡터스토어 없음 - 직접 파일 읽기]")
         return handle_fallback_mode(file_path, query, memory, final_tokens, task_type)
     
-    # 4. 향상된 벡터 검색 (사용자별 필터링 추가)
+    # 4. 향상된 벡터 검색
     try:
-        file_hash = get_file_hash(file_path)
-        
-        # 사용자 문서만 검색
-        docs = vector_store.similarity_search(
-            query, 
-            k=k,
-            filter={"file_hash": file_hash, "user_id": user_id}
-        )
+        docs = vector_store.similarity_search(query, k=k)
         
         # 검색 결과가 부족한 경우 추가 검색
         if len(docs) < k//2:
             # 쿼리를 단순화해서 다시 검색
-            simple_query = " ".join(query.split()[:3])
-            additional_docs = vector_store.similarity_search(
-                simple_query, 
-                k=k,
-                filter={"file_hash": file_hash, "user_id": user_id}
-            )
+            simple_query = " ".join(query.split()[:3])  # 처음 3단어만
+            additional_docs = vector_store.similarity_search(simple_query, k=k)
             # 중복 제거하면서 합치기
             seen = set()
             all_docs = []
             for doc in docs + additional_docs:
-                doc_hash = hash(doc.page_content[:100])
+                doc_hash = hash(doc.page_content[:100])  # 첫 100자로 중복 판단
                 if doc_hash not in seen:
                     seen.add(doc_hash)
                     all_docs.append(doc)
@@ -365,11 +317,7 @@ def question_answer_with_memory(file_path: str, query: str, memory: BufferMemory
         
         # 텍스트가 너무 짧은 경우 추가 문서 검색
         if len(combined_text) < 500:
-            extra_docs = vector_store.similarity_search(
-                "", 
-                k=5,
-                filter={"file_hash": file_hash, "user_id": user_id}
-            )
+            extra_docs = vector_store.similarity_search("", k=5)  # 일반적인 문서들
             for doc in extra_docs:
                 if doc not in docs:
                     docs.append(doc)
@@ -389,6 +337,9 @@ def question_answer_with_memory(file_path: str, query: str, memory: BufferMemory
     try:
         llm = get_llm(final_tokens)
         answer = llm.invoke(prompt).content
+        
+        # 한국어 응답 확인 및 처리
+        answer = ensure_korean_only(answer)
         
         # 메모리 업데이트
         memory.append(query, answer)
@@ -417,8 +368,24 @@ def handle_fallback_mode(file_path: str, query: str, memory: BufferMemory, token
         
         history = memory.get_formatted_history()
         
-        # 향상된 폴백 프롬프트
-        prompt = create_enhanced_prompt(query, content, history, task_type)
+        # 폴백 모드에서도 한국어 강제 프롬프트 적용
+        prompt = f"""
+[LANGUAGE INSTRUCTION - MANDATORY]
+**반드시 한국어로만 답변하세요. 중국어, 영어, 일본어 등 다른 언어는 절대 사용 금지입니다.**
+
+당신은 Flow팀에서 만든 FlowMate:사내업무길라잡이 AI입니다. 
+모든 답변은 반드시 한국어로만 작성해주세요.
+
+이전 대화 기록:
+{history}
+
+참고 문서 내용:
+{content}
+
+사용자 질문: {query}
+
+**한국어로만 답변:**
+"""
         
         # 토큰 수 조절 (폴백 모드에서는 약간 줄임)
         fallback_tokens = min(tokens, 2048)
@@ -426,41 +393,120 @@ def handle_fallback_mode(file_path: str, query: str, memory: BufferMemory, token
         llm = get_llm(fallback_tokens)
         answer = llm.invoke(prompt).content
         
+        # 폴백 모드에서도 한국어 응답 확인
+        answer = ensure_korean_only(answer)
+        
         memory.append(query, answer)
         return answer
         
     except Exception as e:
         return f"죄송합니다. 문서 처리 중 오류가 발생했습니다: {str(e)}\n\n다시 시도해 주시거나 문서 형식을 확인해 주세요."
 
+def translate_to_korean(text: str) -> str:
+    """중국어나 영어 텍스트를 한국어로 번역"""
+    try:
+        llm = ChatOllama(
+            model="qwen2.5:7b",
+            temperature=0.1,
+            timeout=30.0
+        )
+        
+        # 번역 전용 프롬프트
+        translation_prompt = f"""
+당신은 전문 번역가입니다. 주어진 텍스트를 정확하고 자연스러운 한국어로 번역해주세요.
+
+번역 규칙:
+1. 원문의 의미와 뉘앙스를 정확히 보존할 것
+2. 자연스럽고 읽기 쉬운 한국어로 번역할 것
+3. 전문 용어는 적절한 한국어 용어로 번역할 것
+4. 문단 구조와 서식을 유지할 것
+5. 번역문만 출력하고 추가 설명은 하지 말 것
+
+번역할 텍스트:
+{text}
+
+한국어 번역:"""
+
+        response = llm.invoke(translation_prompt)
+        
+        if response and hasattr(response, 'content'):
+            translated = response.content.strip()
+            
+            # 번역 결과가 유효한지 확인 (한국어 포함 여부)
+            korean_chars = len(re.findall(r'[가-힣]', translated))
+            if korean_chars > 0:
+                return translated
+        
+        return None
+        
+    except Exception as e:
+        print(f"[번역 오류] {str(e)}")
+        return None
+
+def ensure_korean_only(text: str) -> str:
+    """중국어 중심의 응답을 한국어로 번역하여 반환"""
+    if not text or not isinstance(text, str):
+        return "죄송합니다. 응답을 생성할 수 없습니다."
+    
+    # 한국어 문자 비율 체크
+    korean_chars = len(re.findall(r'[가-힣]', text))
+    total_chars = len(re.sub(r'[\s\n\r\t\.,;:!?\-\(\)\[\]{}\"\'`~@#$%^&*+=|\\/<>]', '', text))
+    
+    # 텍스트가 너무 짧으면 그대로 통과
+    if total_chars < 10:
+        return text
+    
+    # 한국어가 전혀 없고 중국어가 많은 경우 번역 시도
+    chinese_chars = len(re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]', text))
+    
+    # 중국어 응답 감지: 한국어가 10% 미만이면서 중국어가 30% 이상인 경우
+    if korean_chars < total_chars * 0.1 and chinese_chars > total_chars * 0.3:
+        print("[언어 감지] 중국어 응답 감지됨, 한국어로 번역 시도 중...")
+        translated = translate_to_korean(text)
+        if translated:
+            return f"{translated}\n\n💡 원본이 중국어로 생성되어 한국어로 번역하였습니다."
+        return "죄송합니다. 한국어로만 답변드릴 수 있습니다. 다시 질문해주세요."
+    
+    # 완전 영어 응답 감지: 한국어가 5% 미만이면서 연속된 영어 문장이 많은 경우
+    english_sentences = re.findall(r'\b[A-Za-z]+(?:\s+[A-Za-z]+){4,}\b', text)
+    if korean_chars < total_chars * 0.05 and len(' '.join(english_sentences)) > total_chars * 0.5:
+        print("[언어 감지] 영어 응답 감지됨, 한국어로 번역 시도 중...")
+        translated = translate_to_korean(text)
+        if translated:
+            return f"{translated}\n\n💡 원본이 영어로 생성되어 한국어로 번역하였습니다."
+        return "죄송합니다. 한국어로만 답변드릴 수 있습니다. 다시 질문해주세요."
+    
+    # 정상적인 한국어 응답은 그대로 반환
+    return text
+
 def clear_cache():
     """캐시 초기화"""
-    global _vector_store_cache, _pinecone_client
+    global _vector_store_cache, _client_cache
     _vector_store_cache.clear()
-    _pinecone_client = None
+    _client_cache = None
     print("[캐시 초기화 완료]")
 
 def get_cache_stats():
     """캐시 상태 확인"""
     return {
         "vector_stores": len(_vector_store_cache),
-        "client_connected": _pinecone_client is not None
+        "client_connected": _client_cache is not None
     }
 
 # Django 호환성 유지
 if __name__ == "__main__":
     # 테스트 코드
     memory = BufferMemory()
-    user_id = "test_user_123"
     
-    print("=== Pinecone 마이그레이션 테스트 ===")
+    print("=== 개선된 버전 테스트 ===")
     
     import time
     start_time = time.time()
-    result1 = question_answer_with_memory("temp/sample.txt", "이 문서의 주요 내용은 무엇인가요?", memory, user_id)
+    result1 = question_answer_with_memory("temp/sample.txt", "이 문서의 주요 내용은 무엇인가요?", memory)
     print(f"첫 번째 답변: {result1[:200]}...")
     
     start_time = time.time()
-    result2 = question_answer_with_memory("temp/sample.txt", "구체적으로 어떤 기술이 사용되었나요?", memory, user_id)
+    result2 = question_answer_with_memory("temp/sample.txt", "구체적으로 어떤 기술이 사용되었나요?", memory)
     print(f"두 번째 답변: {result2[:200]}...")
     
     print(f"\n캐시 상태: {get_cache_stats()}")
