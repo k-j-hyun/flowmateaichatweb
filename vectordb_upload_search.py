@@ -493,12 +493,12 @@ def get_cache_stats():
         "client_connected": _client_cache is not None
     }
 
-# Django 호환성 유지
+
 if __name__ == "__main__":
     # 테스트 코드
     memory = BufferMemory()
     
-    print("=== 개선된 버전 테스트 ===")
+    print("테스트")
     
     import time
     start_time = time.time()
